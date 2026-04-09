@@ -532,9 +532,9 @@ void handleClientInit(const boost::function<void()>& initFunction,
    sessionInfo["allow_file_upload"] = options.allowFileUploads();
    sessionInfo["allow_remove_public_folder"] = options.allowRemovePublicFolder();
    sessionInfo["allow_full_ui"] = options.allowFullUI();
-   sessionInfo["posit_ai_enabled"] = options.positAssistantEnabled() &&
-      options.allowPositAi() &&
-      core::system::getenv("RSTUDIO_DISABLE_POSIT_AI").empty();
+   sessionInfo["posit_assistant_enabled"] = options.positAssistantEnabled() &&
+      options.allowPositAssistant() &&
+      core::system::getenv("RSTUDIO_DISABLE_POSIT_ASSISTANT").empty();
    sessionInfo["websocket_ping_interval"] = options.webSocketPingInterval();
    sessionInfo["websocket_connect_timeout"] = options.webSocketConnectTimeout();
 

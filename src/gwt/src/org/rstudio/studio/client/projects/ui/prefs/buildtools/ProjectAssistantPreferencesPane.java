@@ -118,7 +118,7 @@ public class ProjectAssistantPreferencesPane extends ProjectPreferencesPane
       paiUtil_ = paiUtil;
 
       // Create assistant selector - conditionally include Posit AI option
-      boolean paiEnabled = paiUtil_.isPaiEnabled();
+      boolean paiEnabled = paiUtil_.isPositAssistantEnabled();
       String[] assistantLabels;
       String[] assistantValues;
       if (paiEnabled)
@@ -321,12 +321,12 @@ public class ProjectAssistantPreferencesPane extends ProjectPreferencesPane
                copilotTosPanel_.setVisible(false);
                copilotRefreshed_ = false;
 
-               // Refresh Posit AI status when panel is shown
+               // Refresh Posit Assistant status when panel is shown
                if (!positAiRefreshed_)
                {
                   positAiRefreshed_ = true;
 
-                  // Check if Posit AI is installed
+                  // Check if Posit Assistant is installed
                   server_.assistantVerifyInstalled(
                      UserPrefsAccessor.ASSISTANT_POSIT,
                      new ServerRequestCallback<Boolean>()

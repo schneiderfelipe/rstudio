@@ -187,14 +187,14 @@ bool peerHasCapability(const std::string& method)
 // ============================================================================
 // Feature availability helper
 // ============================================================================
-// Returns true if the Posit AI feature is enabled. This requires:
-// 1. The allow-posit-ai admin option (always true in open-source, configurable in Pro)
+// Returns true if the Posit Assistant feature is enabled. This requires:
+// 1. The allow-posit-assistant admin option (always true in open-source, configurable in Pro)
 // 2. The posit-assistant-enabled session option
-bool isPaiEnabled()
+bool isPositAssistantEnabled()
 {
-   return options().allowPositAi() &&
+   return options().allowPositAssistant() &&
           options().positAssistantEnabled() &&
-          core::system::getenv("RSTUDIO_DISABLE_POSIT_AI").empty();
+          core::system::getenv("RSTUDIO_DISABLE_POSIT_ASSISTANT").empty();
 }
 
 // Returns true if the user has selected Posit AI as their assistant (for code completions)
@@ -217,16 +217,16 @@ std::string getConfiguredChatProvider()
    return prefs::userPrefs().chatProvider();
 }
 
-// Returns true if chat provider is set to Posit AI (for Chat pane)
+// Returns true if chat provider is set to Posit Assistant (for Chat pane)
 // Checks project-level setting first, then falls back to global preference
 bool isChatProviderPosit()
 {
    return getConfiguredChatProvider() == kChatProviderPosit;
 }
 
-// Returns true if the user wants Posit AI for either chat or completions
+// Returns true if the user wants Posit Assistant for either chat or completions
 // Used to determine if install/update operations should be allowed
-bool isPositAiWanted()
+bool isPositAssistantWanted()
 {
    return isChatProviderPosit() || isPaiSelected();
 }
@@ -262,7 +262,7 @@ using chat_logging::shouldLogBackendMessage;
 using chat_logging::rs_chatSetLogLevel;
 
 // Installation functions used throughout
-using chat_installation::locatePositAiInstallation;
+using chat_installation::locatePositAssistantInstallation;
 using chat_installation::verifyPositAiInstallation;
 using chat_installation::getInstalledVersion;
 using chat_installation::getInstalledProtocolVersion;
@@ -4076,7 +4076,7 @@ void doUpdateCheck()
    if (error)
    {
       // Malformed unsupported info — fail closed to be safe
-      WLOG("Failed to parse unsupported info (blocking Posit AI): {}",
+      WLOG("Failed to parse unsupported info (blocking Posit Assistant): {}",
            error.getMessage());
       {
          boost::mutex::scoped_lock lock(s_updateStateMutex);
@@ -4102,8 +4102,8 @@ void doUpdateCheck()
            s_updateState.unsupportedInstalledVersion);
    }
 
-   // Stop Posit AI agent if version/protocol is unsupported or manifest unavailable
-   if (isPositAiUnsupported())
+   // Stop Posit Assistant agent if version/protocol is unsupported or manifest unavailable
+   if (isPositAssistantUnsupported())
    {
       assistant::stopAgentForUpdate();
    }
@@ -4161,7 +4161,7 @@ void doUpdateCheck()
 // Called during session initialization to check for updates
 Error checkForUpdatesOnStartup()
 {
-   if (!isPositAiWanted())
+   if (!isPositAssistantWanted())
    {
       DLOG("Update check skipped: posit not selected for chat or assistant");
       return Success();
@@ -4217,7 +4217,7 @@ Error checkForUpdatesOnStartup()
    if (error)
    {
       // Malformed unsupported info — fail closed to be safe
-      WLOG("Failed to parse unsupported info (blocking Posit AI): {}",
+      WLOG("Failed to parse unsupported info (blocking Posit Assistant): {}",
            error.getMessage());
       {
          boost::mutex::scoped_lock lock(s_updateStateMutex);
@@ -4243,8 +4243,8 @@ Error checkForUpdatesOnStartup()
            s_updateState.unsupportedInstalledVersion);
    }
 
-   // Stop Posit AI agent if version/protocol is unsupported or manifest unavailable
-   if (isPositAiUnsupported())
+   // Stop Posit Assistant agent if version/protocol is unsupported or manifest unavailable
+   if (isPositAssistantUnsupported())
    {
       assistant::stopAgentForUpdate();
    }
@@ -4604,13 +4604,13 @@ Error startChatBackend(bool resumeConversation)
       return Success();
 
    // Locate installation
-   FilePath positAiPath = locatePositAiInstallation();
+   FilePath positAiPath = locatePositAssistantInstallation();
    if (positAiPath.isEmpty())
    {
       std::string userPath = xdg::userDataDir().completePath(kPositAiDirName).getAbsolutePath();
       std::string systemPath = xdg::systemConfigDir().completePath(kPositAiDirName).getAbsolutePath();
       std::string errorMsg = fmt::format(
-         "Posit AI installation not found. Install to: {} (user) or {} (system)",
+         "Posit Assistant installation not found. Install to: {} (user) or {} (system)",
          userPath, systemPath);
       return systemError(boost::system::errc::no_such_file_or_directory,
                         errorMsg,
@@ -4824,7 +4824,7 @@ Error chatDocFocused(const json::JsonRpcRequest& request,
 Error chatVerifyInstalled(const json::JsonRpcRequest& request,
                           json::JsonRpcResponse* pResponse)
 {
-   FilePath installation = locatePositAiInstallation();
+   FilePath installation = locatePositAssistantInstallation();
    bool installed = !installation.isEmpty();
 
    json::Object result;
@@ -4961,11 +4961,11 @@ Error chatGetBackendStatus(const json::JsonRpcRequest& request,
 {
    json::Object result;
 
-   FilePath installation = locatePositAiInstallation();
+   FilePath installation = locatePositAssistantInstallation();
    if (installation.isEmpty())
    {
       result["status"] = "not_installed";
-      result["error"] = "Posit AI not installed.";
+      result["error"] = "Posit Assistant not installed.";
    }
    else if (s_chatBackendPid == -1)
    {
@@ -5022,8 +5022,8 @@ Error chatCheckForUpdates(const json::JsonRpcRequest& request,
 
    // Perform on-demand update check if state hasn't been populated yet,
    // or if the caller explicitly requested a recheck.
-   // This happens when user selects Posit AI in Preferences before the pref is saved.
-   // We allow the check regardless of isPositAiWanted() since checking for available
+   // This happens when user selects Posit Assistant in Preferences before the pref is saved.
+   // We allow the check regardless of isPositAssistantWanted() since checking for available
    // updates doesn't require the preference - only actual installation does.
    {
       boost::mutex::scoped_lock lock(s_updateStateMutex);
@@ -5063,15 +5063,15 @@ Error chatCheckForUpdates(const json::JsonRpcRequest& request,
 Error chatInstallUpdate(const json::JsonRpcRequest& request,
                         json::JsonRpcResponse* pResponse)
 {
-   if (!isPositAiWanted())
+   if (!isPositAssistantWanted())
    {
       return systemError(boost::system::errc::operation_not_permitted,
-                        "Posit AI not selected for chat or assistant",
+                        "Posit not selected for chat or assistant",
                         ERROR_LOCATION);
    }
 
    // Check if we need to perform an update check first
-   // This happens when the user selects Posit AI after session startup
+   // This happens when the user selects Posit Assistant after session startup
    {
       boost::mutex::scoped_lock lock(s_updateStateMutex);
       if (s_updateState.currentVersion.empty())
@@ -5237,7 +5237,7 @@ Error chatGetUpdateStatus(const json::JsonRpcRequest& request,
 {
    boost::mutex::scoped_lock lock(s_updateStateMutex);
 
-   if (!isPositAiWanted())
+   if (!isPositAssistantWanted())
    {
       // Return idle status - posit not selected for chat or assistant
       json::Object result;
@@ -5278,9 +5278,9 @@ Error chatGetUpdateStatus(const json::JsonRpcRequest& request,
    return Success();
 }
 
-// NOTE: No isPositAiWanted()/isPaiEnabled() gate — the user may have
-// disabled Posit AI but still wants to clean up installed files.
-Error chatUninstallPositAi(const json::JsonRpcRequest& request,
+// NOTE: No isPositAssistantWanted()/isPositAssistantEnabled() gate — the user may have
+// disabled Posit Assistant but still wants to clean up installed files.
+Error chatUninstallPositAssistant(const json::JsonRpcRequest& request,
                            json::JsonRpcResponse* pResponse)
 {
    FilePath userDataDir = xdg::userDataDir();
@@ -5296,7 +5296,7 @@ Error chatUninstallPositAi(const json::JsonRpcRequest& request,
       {
          return systemError(
             boost::system::errc::operation_not_permitted,
-            "Posit AI is installed via the RSTUDIO_POSIT_AI_PATH "
+            "Posit Assistant is installed via the RSTUDIO_POSIT_AI_PATH "
             "environment variable and cannot be uninstalled "
             "from RStudio.",
             ERROR_LOCATION);
@@ -5308,7 +5308,7 @@ Error chatUninstallPositAi(const json::JsonRpcRequest& request,
       {
          return systemError(
             boost::system::errc::operation_not_permitted,
-            "Posit AI is installed at the system level by an "
+            "Posit Assistant is installed at the system level by an "
             "administrator and cannot be uninstalled from RStudio.",
             ERROR_LOCATION);
       }
@@ -5316,8 +5316,8 @@ Error chatUninstallPositAi(const json::JsonRpcRequest& request,
       // Already not installed — treat as success so the frontend
       // proceeds to restart RStudio as expected. Clear cached state
       // in case the directory was removed out-of-band while the
-      // session still thinks Posit AI is available.
-      DLOG("Posit AI is not installed; nothing to remove");
+      // session still thinks Posit Assistant is available.
+      DLOG("Posit Assistant is not installed; nothing to remove");
       {
          boost::mutex::scoped_lock lock(s_updateStateMutex);
          s_updateState = UpdateState();
@@ -5405,7 +5405,7 @@ Error chatUninstallPositAi(const json::JsonRpcRequest& request,
       s_positAssistantVersion.clear();
 
       std::string message =
-         "Failed to remove Posit AI installation: " + error.getMessage();
+         "Failed to remove Posit Assistant installation: " + error.getMessage();
       if (!agentStopped)
          message += " (a background process may still be running)";
       message += ". Please restart RStudio and try again.";
@@ -5428,7 +5428,7 @@ Error chatUninstallPositAi(const json::JsonRpcRequest& request,
    s_positAssistantVersion.clear();
    s_expectedShutdown = false;
 
-   DLOG("Posit AI uninstalled successfully");
+   DLOG("Posit Assistant uninstalled successfully");
    pResponse->setResult(json::Value());
    return Success();
 }
@@ -5625,7 +5625,7 @@ bool isSuspendable()
    return !s_chatBusy;
 }
 
-bool isPositAiUnsupported()
+bool isPositAssistantUnsupported()
 {
    boost::mutex::scoped_lock lock(s_updateStateMutex);
    return s_updateState.unsupportedInstalledVersion ||
@@ -5676,15 +5676,15 @@ Error initialize()
    }
 
    // Validate assistant preference consistency
-   // If user has Posit AI selected but PAI is no longer available, reset to "none"
-   if (isPaiSelected() && !isPaiEnabled())
+   // If user has Posit AI selected but Posit Assistant is no longer available, reset to "none"
+   if (isPaiSelected() && !isPositAssistantEnabled())
    {
       prefs::userPrefs().setAssistant(kAssistantNone);
    }
 
    // Validate chat provider preference consistency
    // If user has Posit selected as chat provider but PAI is no longer available, reset to "none"
-   if (isChatProviderPosit() && !isPaiEnabled())
+   if (isChatProviderPosit() && !isPositAssistantEnabled())
    {
       prefs::userPrefs().setChatProvider(kChatProviderNone);
    }
@@ -5727,7 +5727,7 @@ Error initialize()
       (bind(registerRpcMethod, "chat_check_for_updates", chatCheckForUpdates))
       (bind(registerRpcMethod, "chat_install_update", chatInstallUpdate))
       (bind(registerRpcMethod, "chat_get_update_status", chatGetUpdateStatus))
-      (bind(registerRpcMethod, "chat_uninstall_posit_ai", chatUninstallPositAi))
+      (bind(registerRpcMethod, "chat_uninstall_posit_assistant", chatUninstallPositAssistant))
       (bind(registerRpcMethod, "chat_doc_focused", chatDocFocused))
       (bind(registerRpcMethod, "chat_notify_ui_loaded", chatNotifyUILoaded))
       (bind(registerUriHandler, "/ai-chat", handleAIChatRequest))

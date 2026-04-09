@@ -317,9 +317,9 @@ protected:
       ("allow-copilot",
       value<bool>(&allowCopilot_)->default_value(true),
       "Indicates whether or not to allow use of Copilot-related features.")
-      ("allow-posit-ai",
-      value<bool>(&allowPositAi_)->default_value(false),
-      "Indicates whether or not to allow use of Posit AI features.");
+      ("allow-posit-assistant",
+      value<bool>(&allowPositAssistant_)->default_value(false),
+      "Indicates whether or not to allow use of Posit Assistant features.");
 
    pR->add_options()
       ("r-core-source",
@@ -489,7 +489,7 @@ protected:
    pPai->add_options()
       ("posit-assistant-enabled",
       value<bool>(&positAssistantEnabled_)->default_value(true),
-      "Indicates whether or not Posit AI integration can be enabled.")
+      "Indicates whether or not Posit Assistant integration can be enabled.")
       ("posit-assistant-ssl-certificates-file",
       value<std::string>(&positAssistantSslCertificatesFile_)->default_value(""),
       "The path to a file containing one or more trusted certificates in PEM format.")
@@ -498,7 +498,7 @@ protected:
       "The path to an optional shell script, which when invoked, should start the Posit Next Edit Suggestions Language Server.")
       ("posit-assistant-test-manifest",
       value<bool>(&positAssistantTestManifest_)->default_value(false)->implicit_value(true),
-      "Use the test manifest URL for Posit AI package updates.");
+      "Use the test manifest URL for Posit Assistant package updates.");
 
    pTrust->add_options()
       ("project-trust-dialogs",
@@ -590,7 +590,7 @@ public:
    bool allowOverLimitSessions() const { return allowOverLimitSessions_ || allowOverlay(); }
    int abortFreeMemPercent() const { return abortFreeMemPercent_ || allowOverlay(); }
    bool allowCopilot() const { return allowCopilot_ || allowOverlay(); }
-   bool allowPositAi() const { return allowPositAi_ || allowOverlay(); }
+   bool allowPositAssistant() const { return allowPositAssistant_ || allowOverlay(); }
    core::FilePath coreRSourcePath() const { return core::FilePath(coreRSourcePath_); }
    core::FilePath modulesRSourcePath() const { return core::FilePath(modulesRSourcePath_); }
    core::FilePath sessionLibraryPath() const { return core::FilePath(sessionLibraryPath_); }
@@ -724,7 +724,7 @@ protected:
    bool allowOverLimitSessions_;
    int abortFreeMemPercent_;
    bool allowCopilot_;
-   bool allowPositAi_;
+   bool allowPositAssistant_;
    std::string coreRSourcePath_;
    std::string modulesRSourcePath_;
    std::string sessionLibraryPath_;
