@@ -344,11 +344,18 @@
 {
    # Invoke the restart command.
    self$commands.execute("restartR")
-   
-   # Send a command to the console, and wait for it to be executed.
+
+   # Wait for the restart to initiate. The console shows
+   # "Restarting R session..." once the old session is torn down.
+   .rs.waitUntil("R session is restarting", function() {
+      output <- self$console.getOutput()
+      any(grepl("Restarting R session", output, fixed = TRUE))
+   }, swallowErrors = TRUE)
+
+   # Verify the session is responsive by executing a command.
    msg <- sprintf("Waiting for restart [token %s]", .rs.createUUID())
    self$console.executeExpr({ writeLines(!!msg) })
-   
+
    # Wait until we have console output.
    .rs.waitUntil("session is ready", function()
    {
@@ -364,6 +371,13 @@
    mainSessionId <- .rs.automation.mainSessionId
    if (!is.null(mainSessionId))
       .rs.setVar("automation.sessionId", mainSessionId)
+
+   # Wait for the GWT application to be ready. This is necessary because
+   # some commands (e.g. restoreDefaultPaneAndTabLayoutNoPrompt) trigger
+   # a full page reload, and we need to wait for re-initialization.
+   .rs.waitUntil("GWT application is ready", function() {
+      self$js.eval("typeof window.rstudioCallbacks !== 'undefined'")
+   }, swallowErrors = TRUE)
 
    # Clear any popups that might be visible.
    self$keyboard.insertText("<Escape>")
