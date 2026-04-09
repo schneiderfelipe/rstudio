@@ -28,9 +28,8 @@ import org.rstudio.studio.client.application.events.SessionSerializationEvent;
 import org.rstudio.studio.client.application.model.SessionSerializationAction;
 import org.rstudio.studio.client.common.GlobalDisplay;
 import org.rstudio.studio.client.common.satellite.SatelliteManager;
-import org.rstudio.studio.client.common.satellite.model.SatelliteWindowGeometry;
-import org.rstudio.studio.client.workbench.events.LastChanceSaveEvent;
 import org.rstudio.studio.client.common.satellite.events.SatelliteClosedEvent;
+import org.rstudio.studio.client.common.satellite.model.SatelliteWindowGeometry;
 import org.rstudio.studio.client.projects.ui.prefs.events.ProjectOptionsChangedEvent;
 import org.rstudio.studio.client.server.ServerError;
 import org.rstudio.studio.client.server.ServerRequestCallback;
@@ -38,10 +37,12 @@ import org.rstudio.studio.client.server.VoidResponse;
 import org.rstudio.studio.client.server.VoidServerRequestCallback;
 import org.rstudio.studio.client.workbench.WorkbenchView;
 import org.rstudio.studio.client.workbench.commands.Commands;
+import org.rstudio.studio.client.workbench.events.LastChanceSaveEvent;
 import org.rstudio.studio.client.workbench.model.ClientState;
 import org.rstudio.studio.client.workbench.model.Session;
 import org.rstudio.studio.client.workbench.model.helper.JSObjectStateValue;
 import org.rstudio.studio.client.workbench.prefs.model.UserPrefs;
+import org.rstudio.studio.client.workbench.ui.PaneManager;
 import org.rstudio.studio.client.workbench.views.BasePresenter;
 import org.rstudio.studio.client.workbench.views.chat.events.ChatBackendExitEvent;
 import org.rstudio.studio.client.workbench.views.chat.events.ChatPaneActiveEvent;
@@ -49,7 +50,6 @@ import org.rstudio.studio.client.workbench.views.chat.events.ChatReturnToMainEve
 import org.rstudio.studio.client.workbench.views.chat.events.ChatSatelliteActionEvent;
 import org.rstudio.studio.client.workbench.views.chat.model.ChatSatelliteParams;
 import org.rstudio.studio.client.workbench.views.chat.server.ChatServerOperations;
-import org.rstudio.studio.client.workbench.ui.PaneManager;
 import org.rstudio.studio.client.workbench.views.console.events.ConsolePromptEvent;
 
 import com.google.gwt.core.client.Scheduler;
@@ -318,7 +318,7 @@ public class ChatPresenter extends BasePresenter
                   return;
                }
 
-               // Don't poll for backend if Posit AI isn't selected as chat provider
+               // Don't poll for backend if Posit Assistant isn't selected as chat provider
                if (!paiUtil_.isChatProviderPosit())
                {
                   display_.setStatus(Display.Status.ASSISTANT_NOT_SELECTED);
@@ -553,19 +553,19 @@ public class ChatPresenter extends BasePresenter
 
    // No @Handler: bound via ChatTab.Shim so the command works before the
    // presenter is delay-loaded.
-   void onUninstallPositAI()
+   void onUninstallPositAssistant()
    {
       globalDisplay_.showYesNoMessage(
          GlobalDisplay.MSG_WARNING,
-         constants_.uninstallPositAICaption(),
-         constants_.uninstallPositAIMessage(),
+         constants_.uninstallPositAssistantCaption(),
+         constants_.uninstallPositAssistantMessage(),
          () -> performUninstall(),
          false);
    }
 
    private void performUninstall()
    {
-      server_.chatUninstallPositAi(new ServerRequestCallback<VoidResponse>()
+      server_.chatUninstallPositAssistant(new ServerRequestCallback<VoidResponse>()
       {
          @Override
          public void onResponseReceived(VoidResponse response)
@@ -581,7 +581,7 @@ public class ChatPresenter extends BasePresenter
          public void onError(ServerError error)
          {
             globalDisplay_.showErrorMessage(
-               constants_.uninstallPositAICaption(),
+               constants_.uninstallPositAssistantCaption(),
                error.getUserMessage());
          }
       });
@@ -787,7 +787,7 @@ public class ChatPresenter extends BasePresenter
             return;
          }
 
-         // Posit AI is the effective chat provider, initialize chat
+         // Posit Assistant is the effective chat provider, initialize chat
          initializing_ = true;
          checkForUpdates();
       }
@@ -803,7 +803,7 @@ public class ChatPresenter extends BasePresenter
             display_.hidePoppedOutPlaceholder();
          }
 
-         // Posit AI is not the effective chat provider, stop backend and show not-selected message
+         // Posit Assistant is not the effective chat provider, stop backend and show not-selected message
          initializing_ = false;  // Cancel any ongoing initialization
          stopBackend();
          display_.hideReadlineNotification();
@@ -829,7 +829,7 @@ public class ChatPresenter extends BasePresenter
          return;
       }
 
-      // Check if Posit AI is selected as chat provider before initializing
+      // Check if Posit Assistant is selected as chat provider before initializing
       if (!paiUtil_.isChatProviderPosit())
       {
          cancelPopOut();

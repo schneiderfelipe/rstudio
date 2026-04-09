@@ -25,7 +25,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 
 /**
- * Utility class for Posit AI (PAI) feature availability checks.
+ * Utility class for Posit Assistant feature availability checks.
  */
 @Singleton
 public class PaiUtil
@@ -57,13 +57,13 @@ public class PaiUtil
    }
 
    /**
-    * Returns true if the Posit AI feature is enabled.
+    * Returns true if the Posit Assistant features are enabled.
     *
-    * @return true if PAI is enabled, false otherwise
+    * @return true if Posit Assistant is enabled, false otherwise
     */
-   public boolean isPaiEnabled()
+   public boolean isPositAssistantEnabled()
    {
-      return session_.getSessionInfo().getPositAiEnabled();
+      return session_.getSessionInfo().getPositAssistantEnabled();
    }
 
    /**
@@ -104,11 +104,11 @@ public class PaiUtil
    }
 
    /**
-    * Returns true if Posit AI is the configured chat provider, checking:
+    * Returns true if Posit Assistant is the configured chat provider, checking:
     * 1. Project-level chat provider setting (if set and not "default")
     * 2. Global user preference
     *
-    * @return true if Posit AI is the effective chat provider, false otherwise
+    * @return true if Posit Assistant is the effective chat provider, false otherwise
     */
    public boolean isChatProviderPosit()
    {

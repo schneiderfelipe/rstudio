@@ -31,6 +31,7 @@ public interface ChatConstants extends com.google.gwt.i18n.client.Messages {
     String chatNotInstalledTitle();
     String chatNotInstalledWithVersionMessage(String version);
     String chatNotInstalledDescription();
+    String chatNotInstalledDescriptionWorkbench();
     String chatLearnMore();
     String chatInstallButton();
     String chatInstallTermsOfUse();
@@ -69,8 +70,8 @@ public interface ChatConstants extends com.google.gwt.i18n.client.Messages {
     String chatReadlineWaiting();
 
     // Uninstall
-    String uninstallPositAICaption();
-    String uninstallPositAIMessage();
+    String uninstallPositAssistantCaption();
+    String uninstallPositAssistantMessage();
 
     // Chat satellite window
     String chatSatelliteWindowTitle();
