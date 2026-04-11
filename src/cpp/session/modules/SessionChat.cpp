@@ -188,14 +188,9 @@ bool peerHasCapability(const std::string& method)
 // ============================================================================
 // Feature availability helper
 // ============================================================================
-// Returns true if the Posit Assistant feature is enabled. This requires:
-// 1. The allow-posit-assistant admin option (always true in open-source, configurable in Pro)
-// 2. The posit-assistant-enabled session option
-bool isPositAssistantEnabled()
+bool isPositAssistantEnabledByAdmin()
 {
-   return options().allowPositAssistant() &&
-          options().positAssistantEnabled() &&
-          core::system::getenv("RSTUDIO_DISABLE_POSIT_ASSISTANT").empty();
+   return module_context::isPositAssistantEnabledByAdmin();
 }
 
 // Returns true if the user has selected Posit AI as their assistant (for code completions)
@@ -5286,7 +5281,7 @@ Error chatGetUpdateStatus(const json::JsonRpcRequest& request,
    return Success();
 }
 
-// NOTE: No isPositAssistantWanted()/isPositAssistantEnabled() gate — the user may have
+// NOTE: No isPositAssistantWanted()/isPositAssistantEnabledByAdmin() gate — the user may have
 // disabled Posit Assistant but still wants to clean up installed files.
 Error chatUninstallPositAssistant(const json::JsonRpcRequest& request,
                            json::JsonRpcResponse* pResponse)
@@ -5685,14 +5680,14 @@ Error initialize()
 
    // Validate assistant preference consistency
    // If user has Posit AI selected but Posit Assistant is no longer available, reset to "none"
-   if (isPaiSelected() && !isPositAssistantEnabled())
+   if (isPaiSelected() && !isPositAssistantEnabledByAdmin())
    {
       prefs::userPrefs().setAssistant(kAssistantNone);
    }
 
    // Validate chat provider preference consistency
    // If user has Posit selected as chat provider but PAI is no longer available, reset to "none"
-   if (isChatProviderPosit() && !isPositAssistantEnabled())
+   if (isChatProviderPosit() && !isPositAssistantEnabledByAdmin())
    {
       prefs::userPrefs().setChatProvider(kChatProviderNone);
    }
