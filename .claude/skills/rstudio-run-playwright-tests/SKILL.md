@@ -29,10 +29,14 @@ npx playwright test
 
 # Specific test file
 npx playwright test tests/path/to/test.test.ts
+
+# With extra RStudio CLI args
+RSTUDIO_EXTRA_ARGS="--my-flag --other-option" npx playwright test
 ```
 
 - Connects to RStudio Desktop via CDP on port 9222
 - The fixture handles launching and shutting down RStudio Desktop automatically
+- `RSTUDIO_EXTRA_ARGS` passes space-separated CLI flags to the RStudio process at launch
 
 ## Server Mode
 
