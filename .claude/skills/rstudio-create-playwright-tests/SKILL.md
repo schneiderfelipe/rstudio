@@ -95,8 +95,38 @@ import { test, expect } from '@fixtures/rstudio.fixture';
 - `await expect(locator).toContainText('...')` — not extract text then assert
 - `expect(items).toEqual(expect.arrayContaining([...]))` — order-independent lists
 - `click({ force: true })` on Ace textareas — overlay intercepts normal clicks
-- `pressSequentially()` for all GWT text inputs (console, editor, dialog/wizard `input.gwt-TextBox`) — `fill()` doesn't fire GWT key events, which can leave change handlers untriggered (e.g., OK button stays disabled)
+- `pressSequentially()` for GWT text inputs whose behavior depends on incremental key events firing (console, editor, most dialog/wizard `input.gwt-TextBox` fields where typing a character enables the OK button, triggers autocomplete, etc.) — `fill()` doesn't fire GWT key events in those cases. This is guidance, not a universal law: inputs driven by a discrete trigger like `press('Enter')` or a button click (e.g., the console Find/Replace bar) typically work fine with `fill()`, and `fill()` has the advantage of replacing existing text instead of appending. If unsure, start with `fill()`; switch to `pressSequentially()` only when the handler doesn't fire
 - `test.fixme()` for failing tests — never comment out
+
+### Waits and Timing
+
+**Default to Playwright's built-in assertions** — they retry automatically until the condition is met or the timeout expires. Reach for `sleep()` only when there is no observable DOM/state change to wait on.
+
+| Situation | Do this | Not this |
+|-----------|---------|----------|
+| Waiting for an element | `await expect(locator).toBeVisible()` | `await sleep(2000)` |
+| Waiting for text | `await expect(locator).toContainText(...)` | `await sleep(1000); check text` |
+| Waiting for element to disappear | `await expect(locator).not.toBeVisible()` | `await sleep(3000)` |
+| Waiting for page/session load | `await expect(page.locator(sel)).toBeVisible({ timeout: TIMEOUTS.sessionRestart })` | `await sleep(5000)` |
+
+**When `sleep()` is legitimate:**
+- The 0.2s pause before `keyboard.press("Enter")` after typing (Critical Rule 5 — GWT keystroke processing)
+- Short settling delay after a UI action that has no observable DOM change (e.g., after clicking a menu item before the next element appears — keep it to 200–500ms max)
+- Polling loops where you must wait between retry attempts
+
+**Always use named constants, never magic numbers:**
+
+```typescript
+// Bad
+await sleep(3000);
+
+// Good
+await sleep(TIMEOUTS.sessionRestart);
+```
+
+Add new keys to `utils/constants.ts` `TIMEOUTS` object rather than scattering raw numbers. If a value is used only once and is truly a one-off, add a comment explaining the constraint.
+
+See `utils/constants.ts` for the full list of `TIMEOUTS` keys.
 
 ### Parallel Safety
 
