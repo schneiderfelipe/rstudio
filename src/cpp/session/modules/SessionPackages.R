@@ -2244,7 +2244,19 @@ if (identical(as.character(Sys.info()["sysname"]), "Darwin") &&
       # versus installing a package from CRAN.
       isLocal <- is.null(repos) || any(grepl("/", pkgs, fixed = TRUE))
 
-      if (isLocal)
+      # Allow administrators to suppress post-install source tagging via
+      # the 'allow-package-source-recording' session option.
+      recordSources <- .Call("rs_shouldRecordPackageSources", PACKAGE = "(embedding)")
+
+      if (!recordSources)
+      {
+         # Source recording disabled; invoke install.packages with no
+         # post-install bookkeeping.
+         call <- sys.call()
+         call[[1L]] <- quote(utils::install.packages)
+         result <- eval(call, envir = parent.frame())
+      }
+      else if (isLocal)
       {
          # Invoke the original function.
          call <- sys.call()
@@ -2276,24 +2288,152 @@ if (identical(as.character(Sys.info()["sysname"]), "Darwin") &&
       }
       else
       {
-         # Get paths to DESCRIPTION files, so we can see what packages
-         # were updated before and after installation.
-         before <- .rs.installedPackagesFileInfo(lib)
+         # Scope the before/after scan to the requested packages plus the
+         # dependency closure install.packages will actually traverse. A full
+         # library enumeration can be very slow on network filesystems with
+         # large libraries; the candidate set is an upper bound on what
+         # install.packages can touch.
+         #
+         # Query available.packages() against the same 'repos' install.packages
+         # will use (the hook's formal is either the user's explicit argument
+         # or the install.packages default, getOption("repos")), so the
+         # Repository column used by recordPackageSource matches the repo the
+         # package was actually fetched from. On a transient network/DNS
+         # failure or stale 'repos =', surface a warning and skip source
+         # recording rather than poisoning the user's install with an error
+         # from a bookkeeping lookup.
+         db <- tryCatch(
+            as.data.frame(
+               utils::available.packages(repos = repos),
+               stringsAsFactors = FALSE
+            ),
+            error = function(cnd)
+            {
+               fmt <- "available.packages() failed; skipping post-install source recording: %s"
+               msg <- sprintf(fmt, conditionMessage(cnd))
+               .rs.logWarningMessage(msg)
+               NULL
+            }
+         )
+
+         # 'dependencies' is a formal of utils::install.packages;
+         # .rs.defineHookImpl copies the original function's formals onto this
+         # hook, so the argument (or its default, NA) is bound in our frame
+         # even though it doesn't appear in the source signature here.
+         userDeps <- tryCatch(
+            get("dependencies", envir = environment(), inherits = FALSE),
+            error = function(e) NA
+         )
+
+         whichDeps <- .rs.installPackagesWhichDeps(userDeps)
+
+         candidates <- pkgs
+         if (!is.null(db))
+         {
+            # If any requested packages aren't present in db (Bioconductor,
+            # R-universe, a private mirror, etc.), tools::package_dependencies
+            # returns an empty character vector for those entries and their
+            # transitive deps won't be tagged. Surface the mismatch so the
+            # user can cross-check 'repos'.
+            absent <- setdiff(pkgs, db$Package)
+            if (length(absent) > 0L)
+            {
+               fmt <- "package(s) not present in available.packages(): %s; dependencies may not be tagged (check 'repos')"
+               msg <- sprintf(fmt, paste(absent, collapse = ", "))
+               .rs.logWarningMessage(msg)
+            }
+
+            # Mirror install.packages's getDependencies(): expand 'direct'
+            # types for the requested pkgs (which may include Suggests when
+            # dependencies = TRUE), then recurse only through 'transitive'
+            # types over those deps. Querying the full set with
+            # recursive = TRUE would over-expand the candidate scan via
+            # Suggests-of-Suggests chains that install.packages won't follow.
+            if (length(whichDeps$direct) > 0L)
+            {
+               directDeps <- tools::package_dependencies(
+                  pkgs,
+                  db = db,
+                  recursive = FALSE,
+                  which = whichDeps$direct
+               )
+               directDeps <- unique(unlist(directDeps, use.names = FALSE))
+
+               transDeps <- if (length(directDeps) > 0L &&
+                                length(whichDeps$transitive) > 0L)
+               {
+                  out <- tools::package_dependencies(
+                     directDeps,
+                     db = db,
+                     recursive = TRUE,
+                     which = whichDeps$transitive
+                  )
+                  unique(unlist(out, use.names = FALSE))
+               }
+
+               candidates <- unique(c(candidates, directDeps, transDeps))
+            }
+         }
+
+         # install.packages recycles 'lib' against 'pkgs' (see ?install.packages),
+         # so candidates can land in any of the supplied library entries; scan
+         # all of them rather than just the first. install.packages itself
+         # errors out if any 'lib' entry is non-writable, so each entry here
+         # is a possible install target.
+         paths <- as.vector(outer(lib, candidates, file.path))
+
+         # Pin a reference timestamp in each library filesystem's own clock
+         # domain, so NFS / CIFS clock skew between this R session and the
+         # fs server can't cause us to miss packages whose mtime lands just
+         # before Sys.time(). When 'lib' has multiple entries on different
+         # filesystems, a single sentinel from lib[[1L]] isn't comparable to
+         # mtimes from the other entries, so create one sentinel per entry.
+         # If sentinel creation fails (read-only library, full disk,
+         # restrictive umask), file.create() returns FALSE and
+         # file.info()$mtime would be NA, silently disabling all tagging for
+         # that entry; fall back to Sys.time() so install.packages still
+         # runs and we still attempt source recording.
+         libStarts <- .POSIXct(rep_len(NA_real_, length(lib)))
+         sentinels <- character(length(lib))
+         on.exit(unlink(sentinels[nzchar(sentinels)], force = TRUE), add = TRUE)
+         for (i in seq_along(lib))
+         {
+            sentinels[i] <- tempfile("rstudio-install-sentinel-", tmpdir = lib[[i]])
+            sentinelOk <- isTRUE(suppressWarnings(file.create(sentinels[i])))
+            libStarts[i] <- if (sentinelOk)
+            {
+               file.info(sentinels[i])$mtime
+            }
+            else
+            {
+               .rs.logWarningMessage(sprintf(
+                  "could not create sentinel file in '%s'; falling back to Sys.time() for install timestamp",
+                  lib[[i]]
+               ))
+               Sys.time()
+            }
+         }
 
          # Invoke the original function.
          call <- sys.call()
          call[[1L]] <- quote(utils::install.packages)
          result <- eval(call, envir = parent.frame())
 
-         # Check and see what packages were updated.
-         after <- .rs.installedPackagesFileInfo(lib)
+         # Any candidate whose directory mtime is at or after the sentinel
+         # in its library was created or replaced during this install.
+         # 'paths' was built via outer(lib, candidates, ...), which fills
+         # column-major: paths[1..nLibs] correspond to candidate 1 across
+         # each lib, paths[nLibs+1..] to candidate 2, etc. So libStarts
+         # recycles position-wise against 'paths'.
+         after <- .rs.installedPackagesFileInfo(paths = paths)
+         pathStarts <- rep_len(libStarts, length(paths))
+         changed <- !is.na(after$mtime) & after$mtime >= pathStarts
 
-         # Figure out which packages were changed.
-         rows <- .rs.installedPackagesFileInfoDiff(before, after)
-
-         # For any packages which appear to have been updated,
-         # tag their DESCRIPTION file with their installation source.
-         .rs.recordPackageSource(rows$path)
+         # Tag each updated package's DESCRIPTION with its installation
+         # source. Skip when available.packages() failed earlier; without
+         # 'db' we can't match repository entries.
+         if (!is.null(db))
+            .rs.recordPackageSource(after$path[changed], db = db)
       }
 
       # Notify the front-end that we've made some updates.

@@ -2079,13 +2079,16 @@ environment(.rs.Env[[".rs.addFunction"]]) <- .rs.Env
    ""
 })
 
-.rs.addFunction("recordPackageSource", function(pkgPaths, pkgSrc = NULL)
+.rs.addFunction("recordPackageSource", function(pkgPaths, pkgSrc = NULL, db = NULL)
 {
-   # Request available packages.
-   db <- if (is.null(pkgSrc)) as.data.frame(
-      utils::available.packages(),
-      stringsAsFactors = FALSE
-   )
+   # Request available packages when not using an explicit source and no db was provided.
+   if (is.null(pkgSrc) && is.null(db))
+   {
+      db <- as.data.frame(
+         utils::available.packages(),
+         stringsAsFactors = FALSE
+      )
+   }
 
    # Record sources for each package.
    for (pkgPath in pkgPaths)
@@ -2097,13 +2100,19 @@ environment(.rs.Env[[".rs.addFunction"]]) <- .rs.Env
    # Infer package name from installed path.
    pkgName <- basename(pkgPath)
 
-   # Read the package's DESCRIPTION file.
-   pkgDesc <- packageDescription(pkgName, lib.loc = dirname(pkgPath))
+   # Read the DESCRIPTION file directly. The skip-if-tagged check below
+   # must read from the same source we write to; packageDescription()
+   # prefers Meta/package.rds, which can be out of sync with DESCRIPTION
+   # (e.g. after a manual rebuild) and would let us silently append a
+   # duplicate set of Remote* lines.
+   descPath <- file.path(pkgPath, "DESCRIPTION")
+   descMatrix <- tryCatch(read.dcf(descPath), error = function(e) NULL)
+   if (is.null(descMatrix) || nrow(descMatrix) == 0L)
+      return()
 
    # If the package already has some remote fields recorded, then skip.
    # Currently, this is relevant for packages installed from R-universe.
-   remotes <- grep("^Remote", names(pkgDesc), value = TRUE)
-   if (length(remotes))
+   if (length(grep("^Remote", colnames(descMatrix))))
       return()
 
    remoteFields <- if (!is.null(pkgSrc))
@@ -2122,7 +2131,10 @@ environment(.rs.Env[[".rs.addFunction"]]) <- .rs.Env
          return()
 
       # Grab the package version.
-      pkgVersion <- pkgDesc[["Version"]]
+      pkgVersion <- if ("Version" %in% colnames(descMatrix))
+         descMatrix[1L, "Version"]
+      else
+         NA_character_
 
       # Normalize the repository path, removing source / binary suffixes.
       pkgSource <- gsub("/(src|bin)/.*", "", pkgEntry$Repository, perl = TRUE)
@@ -2147,7 +2159,6 @@ environment(.rs.Env[[".rs.addFunction"]]) <- .rs.Env
 
    # Update the DESCRIPTION file. We read and write the DESCRIPTION file
    # just to avoid issues with potential trailing lines.
-   descPath <- file.path(pkgPath, "DESCRIPTION")
    descContents <- readLines(descPath, warn = FALSE)
    descContents <- descContents[nzchar(descContents)]
    descContents <- c(descContents, remoteText)
@@ -2187,13 +2198,33 @@ environment(.rs.Env[[".rs.addFunction"]]) <- .rs.Env
       object
 })
 
-.rs.addFunction("installedPackagesFileInfo", function(lib = .libPaths())
+.rs.addFunction("installedPackagesFileInfo", function(lib = .libPaths(), paths = NULL)
 {
-   pkgPaths <- list.files(lib, full.names = TRUE)
-   descPaths <- file.path(pkgPaths, "DESCRIPTION")
-   pkgInfo <- file.info(pkgPaths, extra_cols = FALSE)
+   if (is.null(paths))
+      paths <- list.files(lib, full.names = TRUE)
+   pkgInfo <- file.info(paths, extra_cols = FALSE)
    pkgInfo$path <- row.names(pkgInfo)
    pkgInfo
+})
+
+.rs.addFunction("installPackagesWhichDeps", function(userDeps)
+{
+   # Maps the user's 'dependencies' argument onto the dependency types
+   # tools::package_dependencies should query. Returns a list with
+   # 'direct' (types to expand for the requested pkgs) and 'transitive'
+   # (types to recurse through for added dependencies) so we can mirror
+   # install.packages's getDependencies(): when dependencies = TRUE, the
+   # requested pkgs pull in Suggests but their dependencies do not.
+   strong <- c("Depends", "Imports", "LinkingTo")
+   userDeps <- if (is.character(userDeps)) userDeps[!is.na(userDeps)] else userDeps
+   if (isTRUE(userDeps))
+      list(direct = c(strong, "Suggests"), transitive = strong)
+   else if (isFALSE(userDeps))
+      list(direct = character(), transitive = character())
+   else if (is.character(userDeps))
+      list(direct = userDeps, transitive = userDeps)
+   else
+      list(direct = strong, transitive = strong)
 })
 
 .rs.addFunction("installedPackagesFileInfoDiff", function(before, after)
