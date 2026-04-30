@@ -5,6 +5,10 @@
 - ([#16541](https://github.com/rstudio/rstudio/issues/16541)): Section headers now fold hierarchically based on heading level, matching Positron's default behavior
 
 ### Fixed
+- ([#17084](https://github.com/rstudio/rstudio/issues/17084)): The Shiny test commands (Record Test, Run Tests, Compare Results) now use the `shinytest2` package; `shinytest` has been deprecated.
+
+### Fixed
+- 
 - ([rstudio/rstudio-pro#10805](https://github.com/rstudio/rstudio-pro/issues/10805)): Server: Enable TCP keepalive on accepted connections so the operating system reaps half-open sockets from disappeared clients (browser tab hibernation, NAT timeouts) instead of holding them indefinitely.
 - ([#12235](https://github.com/rstudio/rstudio/issues/12235)): RStudio Desktop's Session > New Session now opens noticeably faster.
 - ([#17440](https://github.com/rstudio/rstudio/issues/17440)): Fixed an issue where triggering tab completion inside `[` on a large Matrix-package sparse matrix could hang RStudio and exhaust system memory
