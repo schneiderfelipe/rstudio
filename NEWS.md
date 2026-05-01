@@ -4,6 +4,7 @@
 - ([#17514](https://github.com/rstudio/rstudio/issues/17514)): Added the `allow-package-source-recording` session option (default `true`); when set to `false`, RStudio will not annotate DESCRIPTION files of packages installed via `install.packages()` with the remote repository they came from.
 
 ### Fixed
+- ([#17481](https://github.com/rstudio/rstudio/issues/17481)): Fixed two debugger regressions: top-level breakpoints (e.g. via `debugSource()`) no longer fail to show the debug highlight or call stack, and multi-line input at the `Browse[N]>` prompt no longer clears the captured browser context.
 - ([#3780](https://github.com/rstudio/rstudio/issues/3780)): The Files pane delete confirmation now reflects whether the file will be moved to the system Trash/Recycle Bin or permanently deleted, based on the "Delete files to Trash/Recycle Bin" preference.
 - ([#3780](https://github.com/rstudio/rstudio/issues/3780)): When sending a file to the system Trash/Recycle Bin fails, the Files pane now reports the error and leaves the file on disk; previously it would silently fall back to permanently deleting the file.
 - ([#12235](https://github.com/rstudio/rstudio/issues/12235)): RStudio Desktop's Session > New Session now opens noticeably faster.
@@ -18,6 +19,7 @@
 - ([#17506](https://github.com/rstudio/rstudio/issues/17506)): Source-marker messages in the Build, Markers, and Compile PDF panes are now rendered as plain text by default; only messages that the server explicitly marks as HTML (e.g. C++ Find Usages highlighting) are rendered via `innerHTML`.
 - ([#17508](https://github.com/rstudio/rstudio/issues/17508)): Enabled the MathJax `Safe` extension in the IDE, the HTML preview, the presentation preview, and the rendered R Markdown viewer.
 - ([#17510](https://github.com/rstudio/rstudio/issues/17510)): Data Import: column names, character options, locale values, and import URLs are now encoded as R string literals when generating preview and import code.
+- ([rstudio/rstudio-pro#10805](https://github.com/rstudio/rstudio-pro/issues/10805)): Server: Enable TCP keepalive on accepted connections so the operating system reaps half-open sockets from disappeared clients (browser tab hibernation, NAT timeouts) instead of holding them indefinitely.
 - ([rstudio/rstudio-pro#10771](https://github.com/rstudio/rstudio-pro/issues/10771)): Reduced filesystem work performed by the `install.packages()` hook; the before/after scan is now scoped to the requested packages and their dependency closure rather than the entire library.
 - ([rstudio/rstudio-pro#10771](https://github.com/rstudio/rstudio-pro/issues/10771)): Tightened the heuristic used to detect package-management commands at the console prompt, reducing spurious Packages pane refreshes triggered by identifiers like `updates <-` or `installed.packages()`.
 - ([rstudio/rstudio-pro#10805](https://github.com/rstudio/rstudio-pro/issues/10805)): Server: Enable TCP keepalive on accepted connections so the operating system reaps half-open sockets from disappeared clients (browser tab hibernation, NAT timeouts) instead of holding them indefinitely.
