@@ -5365,43 +5365,48 @@ Error chatUninstallPositAssistant(const json::JsonRpcRequest& request,
    FilePath aiDir = userDataDir.completePath(kPositAiDirName);
    FilePath aiPrevDir = userDataDir.completePath(kPositAiBackupDirName);
 
+   // No user-data install paths exist. Distinguish env/system/none to give
+   // the user a targeted message. Each branch delivers its message via
+   // client_info on the JSON-RPC error so the frontend can show it verbatim
+   // (Error::getSummary() would otherwise wrap the system errno text and
+   // obscure our description).
    if (!aiDir.exists() && !aiPrevDir.exists())
    {
-      // No user-data install — check for env/system installs to give a
-      // targeted error message instead of a generic "not installed".
       std::string envPath = core::system::getenv("RSTUDIO_POSIT_AI_PATH");
       if (!envPath.empty() && FilePath(envPath).exists())
       {
-         return systemError(
-            boost::system::errc::operation_not_permitted,
-            "Posit Assistant is installed via the RSTUDIO_POSIT_AI_PATH "
-            "environment variable and cannot be uninstalled "
-            "from RStudio.",
-            ERROR_LOCATION);
+         pResponse->setError(
+            systemError(boost::system::errc::operation_not_permitted, ERROR_LOCATION),
+            json::Value(
+               "Posit Assistant is installed via the RSTUDIO_POSIT_AI_PATH "
+               "environment variable and cannot be uninstalled "
+               "from RStudio."));
+         return Success();
       }
 
       FilePath systemPath =
          xdg::systemConfigDir().completePath(kPositAiDirName);
       if (systemPath.exists())
       {
-         return systemError(
-            boost::system::errc::operation_not_permitted,
-            "Posit Assistant is installed at the system level by an "
-            "administrator and cannot be uninstalled from RStudio.",
-            ERROR_LOCATION);
+         pResponse->setError(
+            systemError(boost::system::errc::operation_not_permitted, ERROR_LOCATION),
+            json::Value(
+               "Posit Assistant is installed at the system level by an "
+               "administrator and cannot be uninstalled from RStudio."));
+         return Success();
       }
 
-      // Already not installed — treat as success so the frontend
-      // proceeds to restart RStudio as expected. Clear cached state
-      // in case the directory was removed out-of-band while the
-      // session still thinks Posit Assistant is available.
       DLOG("Posit Assistant is not installed; nothing to remove");
+      // Clear cached state in case the directory was removed out-of-band
+      // while the session still thinks Posit Assistant is available.
       {
          boost::mutex::scoped_lock lock(s_updateStateMutex);
          s_updateState = UpdateState();
       }
       s_positAssistantVersion.clear();
-      pResponse->setResult(json::Value());
+      pResponse->setError(
+         systemError(boost::system::errc::operation_not_permitted, ERROR_LOCATION),
+         json::Value("Posit Assistant is not installed."));
       return Success();
    }
 
