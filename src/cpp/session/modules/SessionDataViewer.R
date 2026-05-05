@@ -458,44 +458,35 @@
    # whose is.na returns a non-logical can throw on a single call. With
    # error-surfacing in place at the C++ layer, a single throw would blank
    # the entire panel rather than degrading gracefully.
-   tryStat <- function(expr) {
-      tryCatch(expr, error = function(e) NULL)
-   }
-
-   nonNa <- tryStat(col[!is.na(col)])
+   nonNa <- .rs.tryOr(NULL, col[!is.na(col)])
 
    result <- list(
       n        = .rs.scalar(n),
-      n_na     = .rs.scalar(.rs.nullCoalesce(tryStat(sum(is.na(col))), NA_integer_)),
-      n_unique = .rs.scalar(.rs.nullCoalesce(tryStat(length(unique(nonNa))), NA_integer_))
+      n_na     = .rs.scalar(.rs.tryOr(NA_integer_, sum(is.na(col)))),
+      n_unique = .rs.scalar(.rs.tryOr(NA_integer_, length(unique(nonNa))))
    )
-
-   addStat <- function(name, expr) {
-      val <- tryStat(expr)
-      if (!is.null(val)) result[[name]] <<- .rs.scalar(val)
-   }
 
    if (is.numeric(col) && !is.factor(col))
    {
       if (!is.null(nonNa) && length(nonNa) > 0)
       {
-         addStat("min",    min(nonNa))
-         addStat("max",    max(nonNa))
-         addStat("mean",   mean(nonNa))
-         addStat("median", median(nonNa))
-         addStat("sd",     sd(nonNa))
+         result$min    <- .rs.scalar(.rs.tryOr(NULL, min(nonNa)))
+         result$max    <- .rs.scalar(.rs.tryOr(NULL, max(nonNa)))
+         result$mean   <- .rs.scalar(.rs.tryOr(NULL, mean(nonNa)))
+         result$median <- .rs.scalar(.rs.tryOr(NULL, median(nonNa)))
+         result$sd     <- .rs.scalar(.rs.tryOr(NULL, sd(nonNa)))
       }
    }
    else if (is.character(col))
    {
       if (!is.null(nonNa) && length(nonNa) > 0)
       {
-         lens <- tryStat(nchar(nonNa))
+         lens <- .rs.tryOr(NULL, nchar(nonNa))
          if (!is.null(lens))
          {
-            addStat("min_length", min(lens))
-            addStat("max_length", max(lens))
-            addStat("n_empty",    sum(lens == 0))
+            result$min_length <- .rs.scalar(.rs.tryOr(NULL, min(lens)))
+            result$max_length <- .rs.scalar(.rs.tryOr(NULL, max(lens)))
+            result$n_empty    <- .rs.scalar(.rs.tryOr(NULL, sum(lens == 0)))
          }
       }
    }
@@ -505,8 +496,8 @@
       # and any user-set order. When the level count exceeds the cap we
       # truncate to the first N by encoding order, not the N most frequent.
       maxLevels <- 50L
-      tbl <- tryStat(table(col, useNA = "no"))
-      lvls <- tryStat(levels(col))
+      tbl <- .rs.tryOr(NULL, table(col, useNA = "no"))
+      lvls <- .rs.tryOr(NULL, levels(col))
       if (!is.null(tbl) && !is.null(lvls))
       {
          if (length(lvls) > maxLevels)
@@ -520,15 +511,15 @@
    }
    else if (is.logical(col))
    {
-      addStat("n_true",  sum(col == TRUE, na.rm = TRUE))
-      addStat("n_false", sum(col == FALSE, na.rm = TRUE))
+      result$n_true  <- .rs.scalar(.rs.tryOr(NULL, sum(col == TRUE,  na.rm = TRUE)))
+      result$n_false <- .rs.scalar(.rs.tryOr(NULL, sum(col == FALSE, na.rm = TRUE)))
    }
    else if (inherits(col, "Date") || inherits(col, "POSIXct"))
    {
       if (!is.null(nonNa) && length(nonNa) > 0)
       {
-         addStat("min", as.character(min(nonNa)))
-         addStat("max", as.character(max(nonNa)))
+         result$min <- .rs.scalar(.rs.tryOr(NULL, as.character(min(nonNa))))
+         result$max <- .rs.scalar(.rs.tryOr(NULL, as.character(max(nonNa))))
       }
    }
 
