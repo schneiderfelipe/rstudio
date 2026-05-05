@@ -154,7 +154,53 @@
    # we pass totalCols in the rownames col so we can pass this information
    # along when we retrieve column data, without changing the response format
    totalCols <- if (totalCols > 0) totalCols else ncol(x)
-   
+
+   # Cap the col_max_chars hint computation at this many columns. Above
+   # the cap, each per-column scan would add up; the client falls back to
+   # sampling the visible rows instead.
+   maxCharsCap <- 200L
+   computeMaxChars <- ncol(x) > 0 && ncol(x) <= maxCharsCap
+
+   # Cheap upper bound on the displayed character count for a column.
+   # Only handles types where the bound is a property of range/levels/type
+   # rather than a per-element format() call. Returns NA if the column type
+   # is not a known-cheap case so the client falls back to sampling.
+   colMaxChars <- function(col) {
+      if (length(col) == 0L)
+         return(NA_integer_)
+      if (is.logical(col))
+         return(5L)  # "FALSE"
+      if (inherits(col, "Date"))
+         return(10L) # "YYYY-MM-DD"
+      if (inherits(col, "POSIXt"))
+         return(19L) # "YYYY-MM-DD HH:MM:SS"
+      if (is.factor(col)) {
+         lvls <- levels(col)
+         if (length(lvls) == 0L) return(0L)
+         return(max(nchar(lvls, type = "width"), na.rm = TRUE))
+      }
+      if (is.character(col))
+         return(max(nchar(col, type = "width"), 0L, na.rm = TRUE))
+      if (is.integer(col)) {
+         rng <- suppressWarnings(range(col, na.rm = TRUE))
+         if (!all(is.finite(rng))) return(NA_integer_)
+         return(max(nchar(as.character(rng))))
+      }
+      if (is.numeric(col) && !is.object(col)) {
+         # Treat doubles whose values are all integral the same as integer;
+         # avoid format() on the full column otherwise (expensive and
+         # options-dependent).
+         finiteCol <- col[is.finite(col)]
+         if (length(finiteCol) == 0L) return(NA_integer_)
+         if (all(finiteCol == trunc(finiteCol))) {
+            rng <- range(finiteCol)
+            return(max(nchar(as.character(rng))))
+         }
+         return(NA_integer_)
+      }
+      NA_integer_
+   }
+
    # the first column is always the row names
    rowNameCol <- list(
       col_name        = .rs.scalar(""),
@@ -165,7 +211,36 @@
       col_label       = .rs.scalar(""),
       col_vals        = "",
       col_type_r      = .rs.scalar(""),
-      total_cols      = .rs.scalar(totalCols))
+      col_na_count    = .rs.scalar(0),
+      total_cols      = .rs.scalar(totalCols),
+      total_rows      = .rs.scalar(nrow(x)))
+
+   # Add a max-chars hint for the row names column. Use .row_names_info()
+   # so we avoid materializing the full row-name vector for the common
+   # case of automatic rownames -- type=1L returns a signed row count:
+   # negative for the compact c(NA, -n) form (auto), positive otherwise.
+   if (computeMaxChars) {
+      rnInfo <- .row_names_info(x, type = 1L)
+      rnChars <- NA_integer_
+      if (is.integer(rnInfo) && length(rnInfo) == 1L && !is.na(rnInfo)) {
+         if (rnInfo < 0L) {
+            # Automatic rownames: widest displayed value is the row count.
+            rnChars <- nchar(as.character(-rnInfo))
+         } else if (rnInfo > 0L) {
+            # Explicit rownames -- cheap to bound for integer/character.
+            rnAttr <- attr(x, "row.names", exact = TRUE)
+            if (is.integer(rnAttr)) {
+               rng <- suppressWarnings(range(rnAttr, na.rm = TRUE))
+               if (all(is.finite(rng)))
+                  rnChars <- max(nchar(as.character(rng)))
+            } else if (is.character(rnAttr)) {
+               rnChars <- max(nchar(rnAttr, type = "width"), 0L, na.rm = TRUE)
+            }
+         }
+      }
+      if (!is.na(rnChars))
+         rowNameCol$col_max_chars <- .rs.scalar(as.integer(rnChars))
+   }
    
    # if there are no columns, bail out
    if (length(colNames) == 0) {
@@ -214,7 +289,11 @@
       if (length(x[[idx]]) > 0)
       {
          val <- x[[idx]][[1]]
-         col_type_r <- typeof(val)
+         # col_type_r feeds the sidebar's typeLabel map in DataViewer.js;
+         # changing this from typeof(val) to class(val)[[1]] is a wire-
+         # protocol-visible behavior change (e.g. Date columns now report
+         # "Date" instead of "double").
+         col_type_r <- class(val)[[1]]
          if (is.factor(val))
          {
             # we previously used the 'maxFactors' variable to try and guess
@@ -240,13 +319,28 @@
             hist_vals <- x[[idx]][is.finite(x[[idx]])]
             if (length(hist_vals) > 1)
             {
+               # For whole-number columns spanning a small range, draw one
+               # bar per integer value (so e.g. a 1-5 Likert column shows 5
+               # distinct bars rather than Sturges' default binning, which
+               # smears the discrete structure). Gaps in the range get a
+               # zero-height bar, which is itself informative.
+               int_breaks <- NULL
+               min_v <- min(hist_vals)
+               max_v <- max(hist_vals)
+               n_distinct <- max_v - min_v + 1
+               if (n_distinct <= 12 && isTRUE(all(hist_vals %% 1 == 0)))
+                  int_breaks <- seq(min_v - 0.5, max_v + 0.5, by = 1)
+
                # create histogram for brushing -- suppress warnings as in rare cases
                # an otherwise benign integer overflow can occurs; see
                # https://github.com/rstudio/rstudio/issues/3232
-               h <- suppressWarnings(graphics::hist(hist_vals, plot = FALSE))
+               h <- if (is.null(int_breaks))
+                  suppressWarnings(graphics::hist(hist_vals, plot = FALSE))
+               else
+                  suppressWarnings(graphics::hist(hist_vals, breaks = int_breaks, plot = FALSE))
                col_breaks <- h$breaks
                col_counts <- h$counts
-               
+
                # record column type
                col_type <- "numeric"
                col_search_type <- "numeric"
@@ -276,7 +370,10 @@
             col_type <- "list"
          }
       }
-      list(
+      # count NA values
+      col_na_count <- sum(is.na(x[[idx]]))
+
+      result <- list(
          col_name        = .rs.scalar(col_name),
          col_type        = .rs.scalar(col_type),
          col_breaks      = as.character(col_breaks),
@@ -284,8 +381,20 @@
          col_search_type = .rs.scalar(col_search_type),
          col_label       = .rs.scalar(col_label),
          col_vals        = col_vals,
-         col_type_r      = .rs.scalar(col_type_r)
+         col_type_r      = .rs.scalar(col_type_r),
+         col_na_count    = .rs.scalar(col_na_count)
       )
+
+      # Optionally include a cheap upper bound on displayed character count.
+      # The client uses this for initial column width sizing instead of
+      # sampling rows; absence of the field means "sample on the client."
+      if (computeMaxChars) {
+         maxCh <- colMaxChars(x[[idx]])
+         if (!is.na(maxCh))
+            result$col_max_chars <- .rs.scalar(as.integer(maxCh))
+      }
+
+      result
    })
    c(list(rowNameCol), colAttrs)
 })
@@ -333,6 +442,97 @@
       
    
    .rs.describeCols(colSlice, -1, -1, 64, totalCols)
+})
+
+.rs.addFunction("summarizeColumn", function(x, columnIndex)
+{
+   # columnIndex is 1-based (R convention)
+   if (columnIndex < 1 || columnIndex > ncol(x))
+      return(list(error = .rs.scalar("Column index out of range")))
+
+   col <- x[[columnIndex]]
+   n <- length(col)
+
+   # Each statistic is wrapped individually: exotic numerics that pass
+   # is.numeric (difftime, S4 numerics, units::units, ...) and columns
+   # whose is.na returns a non-logical can throw on a single call. With
+   # error-surfacing in place at the C++ layer, a single throw would blank
+   # the entire panel rather than degrading gracefully.
+   tryStat <- function(expr) {
+      tryCatch(expr, error = function(e) NULL)
+   }
+
+   nonNa <- tryStat(col[!is.na(col)])
+
+   result <- list(
+      n        = .rs.scalar(n),
+      n_na     = .rs.scalar(.rs.nullCoalesce(tryStat(sum(is.na(col))), NA_integer_)),
+      n_unique = .rs.scalar(.rs.nullCoalesce(tryStat(length(unique(nonNa))), NA_integer_))
+   )
+
+   addStat <- function(name, expr) {
+      val <- tryStat(expr)
+      if (!is.null(val)) result[[name]] <<- .rs.scalar(val)
+   }
+
+   if (is.numeric(col) && !is.factor(col))
+   {
+      if (!is.null(nonNa) && length(nonNa) > 0)
+      {
+         addStat("min",    min(nonNa))
+         addStat("max",    max(nonNa))
+         addStat("mean",   mean(nonNa))
+         addStat("median", median(nonNa))
+         addStat("sd",     sd(nonNa))
+      }
+   }
+   else if (is.character(col))
+   {
+      if (!is.null(nonNa) && length(nonNa) > 0)
+      {
+         lens <- tryStat(nchar(nonNa))
+         if (!is.null(lens))
+         {
+            addStat("min_length", min(lens))
+            addStat("max_length", max(lens))
+            addStat("n_empty",    sum(lens == 0))
+         }
+      }
+   }
+   else if (is.factor(col))
+   {
+      # Display levels in their R-encoded order to preserve ordered factors
+      # and any user-set order. When the level count exceeds the cap we
+      # truncate to the first N by encoding order, not the N most frequent.
+      maxLevels <- 50L
+      tbl <- tryStat(table(col, useNA = "no"))
+      lvls <- tryStat(levels(col))
+      if (!is.null(tbl) && !is.null(lvls))
+      {
+         if (length(lvls) > maxLevels)
+         {
+            lvls <- lvls[seq_len(maxLevels)]
+            result$truncated <- .rs.scalar(TRUE)
+         }
+         result$top_levels  <- lvls
+         result$top_counts  <- as.integer(tbl[lvls])
+      }
+   }
+   else if (is.logical(col))
+   {
+      addStat("n_true",  sum(col == TRUE, na.rm = TRUE))
+      addStat("n_false", sum(col == FALSE, na.rm = TRUE))
+   }
+   else if (inherits(col, "Date") || inherits(col, "POSIXct"))
+   {
+      if (!is.null(nonNa) && length(nonNa) > 0)
+      {
+         addStat("min", as.character(min(nonNa)))
+         addStat("max", as.character(max(nonNa)))
+      }
+   }
+
+   result
 })
 
 .rs.addFunction("formatRowNames", function(x, start, len) 
