@@ -15,6 +15,8 @@
 
 #include "ChatConstants.hpp"
 
+#include <boost/algorithm/string/predicate.hpp>
+
 namespace rstudio {
 namespace session {
 namespace modules {
@@ -49,6 +51,7 @@ const std::vector<std::string>& rstudioCapabilities()
       "ui/openDocument",
       "ui/openDocument/line",
       "ui/revealInFilesPane",
+      "ui/previewUrl",
    };
    return s_capabilities;
 }
@@ -78,6 +81,18 @@ std::string assembleWebSocketPath(
       mapped.pop_back();
 
    return root + session + mapped + "/ai-chat";
+}
+
+bool isValidPreviewUrlScheme(const std::string& url)
+{
+   // Case-sensitive on purpose -- see header comment.
+   return boost::algorithm::starts_with(url, "http://") ||
+          boost::algorithm::starts_with(url, "https://");
+}
+
+bool isValidPreviewUrlHeight(int height)
+{
+   return height >= -1;
 }
 
 } // namespace constants
