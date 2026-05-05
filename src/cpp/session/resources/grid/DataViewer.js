@@ -3669,6 +3669,11 @@ window.refreshData = function() {
    bootstrap();
 };
 
+window.refreshAndReset = function() {
+   clearSavedState();
+   bootstrap();
+};
+
 window.toggleSidebar = function() {
    toggleSidebar();
 };
