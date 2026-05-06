@@ -51,7 +51,7 @@ on:
 jobs:
   e2e-desktop-macos:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       R_LIBS_USER: ${{ github.workspace }}/R-libs
 
@@ -64,15 +64,19 @@ jobs:
 
       - name: Install rig
         run: |
-          curl -fLs https://github.com/r-lib/rig/releases/download/latest/rig-macos-arm64-latest.tar.gz \
-            | sudo tar xz -C /usr/local
+          curl -fLs -o rig.pkg https://github.com/r-lib/rig/releases/download/latest/rig-latest-macOS-arm64.pkg
+          sudo installer -pkg rig.pkg -target /
 
       - name: Install R via rig
         env:
           R_VERSION: ${{ inputs.r_version }}
         run: |
           rig add "$R_VERSION"
-          rig default "$R_VERSION"
+          # rig names installs with arch/major.minor on macOS (e.g. "4.4-arm64"),
+          # not the requested patch or alias. Query rig for the just-installed
+          # name so `rig default` works regardless of input form.
+          INSTALLED_NAME=$(rig list --json | jq -r '.[-1].name')
+          rig default "$INSTALLED_NAME"
           rig ls
           mkdir -p "$R_LIBS_USER"
 
